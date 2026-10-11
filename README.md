@@ -29,8 +29,8 @@
 
 - Original Gemini boot animation from the **Google Pixel 10**
 - Clean and modern animated splash screen
-- Seamlessly integrates with the system via Magisk/KernelSU/APatch
-- **Automatic environment detection** — works on standard setups and KernelSU + SUSFS
+- Uses temporary file bind mounts with Magisk/KernelSU/APatch
+- Early systemless mounting without requiring writable system partitions
 - Lightweight — no performance impact
 - Compatible with **Android 9+**
 - Optimized and tested on devices with **1080 × 2340** pixels
@@ -69,7 +69,7 @@ Five variants are available in [**Releases**](https://github.com/docbt/GeminiBoo
 
 ### Which paths does each variant cover?
 
-| Variant | Paths installed |
+| Variant | Existing paths mounted |
 |---|---|
 | standard | `/product/media/` · `/system/media/` |
 | MIUI | `/product/media/` · `/system/media/` · `/system_ext/media/` · `/system/media/theme/` |
@@ -125,31 +125,30 @@ Your original boot animation will be automatically restored.
 
 ## Compatibility
 
-| Setup | Method | Status |
-|---|---|---|
-| Magisk | Magic Mount | ✅ Tested |
-| KernelSU | Magic Mount | ✅ Tested |
-| KernelSU + SUSFS | Direct write via `service.sh` | ✅ Tested |
-| APatch | Magic Mount | ✅ Tested |
+The module uses `post-fs-data.sh` to bind the animation ZIPs over existing files
+during early boot. If the animation was already preloaded, it restarts the active
+boot animation service to load the mounted ZIPs. It does not remount partitions read-write, disable
+dm-verity, delete symlinks, or replace the original files on disk. Bind mounts
+are made read-only and disappear on reboot; the enabled module reapplies them
+on each boot. Disable or uninstall the module and reboot to restore the originals.
 
-### How automatic detection works (v1.2+, extended in v1.3)
+The installer uses `customize.sh`, which KernelSU, Magisk and APatch module
+managers support. A mounting metamodule is not required by this script. The
+fallback only mounts paths that already contain animation ZIPs; it does not
+create files on read-only partitions. A dark-animation symlink is resolved and
+its target is mounted without deleting the symlink.
 
-The installer detects your root environment at install time and the module adapts automatically:
-
-- **Magisk / standard KernelSU** — uses Magic Mount (overlay on `/product/media` and `/system/media`)
-- **KernelSU + SUSFS** — SUSFS hides Magic Mount overlays from system processes; instead, `service.sh` runs on every boot and writes the animation files directly to the partition (requires dm-verity to be disabled, which is typical on custom ROMs like crDroid)
-
-**v1.3:** `service.sh` was extended for the **Motorola** and **EMUI** variants — on KernelSU + SUSFS setups it also writes directly to the variant-specific paths (`/oem/media/` and `/system/etc/media/` respectively).
-
-> **Note:** On KernelSU + SUSFS setups the animation will appear starting from the **second reboot** after installation (first boot: `service.sh` writes the files; second boot: animation plays from partition).
->
-> Some ROMs ship `bootanimation-dark.zip` as a **symlink** to `bootanimation.zip`. The module handles this automatically — the symlink is replaced with a real file.
+Mount results are recorded in `/data/adb/modules/gemini-bootanimation/mount.log`.
+The standard package was tested on a Pixel 8 with KernelSU Next (`ksud 3.4.1`)
+and Android Canary `ZP11.260918.007`. Boot logs confirmed ZIP loading and playback,
+and the device owner confirmed the Gemini transition was visible. Other root
+implementations and device variants still need device testing.
 
 ---
 
 ## Device-Specific Notes
 
-This module installs `bootanimation.zip` to **both** paths for maximum compatibility:
+This module mounts its animation over existing ZIPs in these paths:
 
 - `/product/media/bootanimation.zip` — higher priority (Android 9+, Pixel, most modern devices)
 - `/system/media/bootanimation.zip` — fallback for older devices and ROMs
@@ -180,7 +179,7 @@ Huawei uses a non-standard path and a proprietary rendering pipeline:
 - EMUI: `/system/etc/media/` or `/data/cust/media/`
 - HarmonyOS: proprietary pipeline — standard `bootanimation.zip` replacement is generally **ineffective**
 
-Use the **EMUI variant** for Huawei devices running EMUI — it installs to `/system/etc/media/` in addition to the standard paths. On KernelSU + SUSFS setups, `service.sh` also writes directly to `/system/etc/media/` (v1.3+).
+Use the **EMUI variant** for Huawei devices running EMUI — it also mounts existing animation ZIPs in `/system/etc/media/`.
 
 > **HarmonyOS** is **not supported** — its rendering pipeline is proprietary and does not use `bootanimation.zip`.
 
@@ -188,7 +187,7 @@ Use the **EMUI variant** for Huawei devices running EMUI — it installs to `/sy
 
 Boot animations on Motorola devices are stored on a dedicated OEM partition at `/oem/media/bootanimation.zip`, which is a separate block device — not `/system/media/`. Replacing the file in `/system/media/` has no effect on stock Motorola firmware.
 
-Use the **Motorola variant** — it additionally installs to `/oem/media/` so the OEM partition path is covered. On KernelSU + SUSFS setups, `service.sh` also writes directly to `/oem/media/` (v1.3+).
+Use the **Motorola variant** — it additionally mounts existing animation ZIPs in `/oem/media/`.
 
 ### Xiaomi MIUI
 
@@ -199,7 +198,7 @@ MIUI checks multiple paths simultaneously. Reliable modules must replace the fil
 - `/system_ext/media/bootanimation.zip`
 - `/system/media/theme/bootanimation.zip`
 
-Use the **MIUI variant** of this module — it automatically installs to all required paths.
+Use the **MIUI variant** of this module — it also mounts existing animation ZIPs in the MIUI-specific paths.
 
 ### Xiaomi HyperOS (2023+)
 
@@ -211,7 +210,7 @@ MTK vendor builds add an additional high-priority path checked **before** all st
 
 - `/custom/media/bootanimation.zip`
 
-If this file exists on your device, it will override what this module installs. Removing or replacing it manually may be necessary.
+If this file exists on your device, use the **MTK variant**, which includes that path in its temporary mounts.
 
 ---
 

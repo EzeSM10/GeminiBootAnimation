@@ -1,38 +1,18 @@
 #!/sbin/sh
-SKIPUNZIP=1
-
-# ── Environment detection ────────────────────────────────────────────────────
-ROOT_IMPL="Magisk"
-SUSFS_ACTIVE=false
-
-if [ "$KSU" = "true" ]; then
-    ROOT_IMPL="KernelSU"
-    if [ -e "/proc/sys/fs/susfs_enabled" ] || \
-       grep -q "susfs" /proc/version 2>/dev/null || \
-       [ -e "/sys/kernel/sus_su" ]; then
-        SUSFS_ACTIVE=true
-        ROOT_IMPL="KernelSU + SUSFS"
-    fi
+# Magisk module installer entry point. KernelSU/APatch use customize.sh instead.
+umask 022
+ui_print() { echo "$1"; }
+OUTFD=$2
+ZIPFILE=$3
+mount /data 2>/dev/null
+if [ ! -f /data/adb/magisk/util_functions.sh ]; then
+    ui_print "Please install Magisk v20.4+ or install through KernelSU/APatch Manager."
+    exit 1
 fi
-
-ui_print "- Gemini Boot Animation v1.2"
-ui_print "  Root: $ROOT_IMPL"
-
-# ── Extract files ────────────────────────────────────────────────────────────
-ui_print "  Extracting..."
-unzip -o "$ZIPFILE" 'files/*'      -d "$MODPATH" || { ui_print "! Extract failed"; exit 1; }
-unzip -o "$ZIPFILE" 'service.sh'   -d "$MODPATH" || { ui_print "! service.sh missing"; exit 1; }
-unzip -o "$ZIPFILE" 'system/*'     -d "$MODPATH" 2>/dev/null || true
-unzip -o "$ZIPFILE" 'product/*'    -d "$MODPATH" 2>/dev/null || true
-
-# ── Permissions ──────────────────────────────────────────────────────────────
-set_perm_recursive "$MODPATH" root root 0755 0644
-chmod 755 "$MODPATH/service.sh"
-
-# ── Summary ──────────────────────────────────────────────────────────────────
-if [ "$SUSFS_ACTIVE" = "true" ]; then
-    ui_print "  SUSFS detected — service.sh writes directly on first boot"
-else
-    ui_print "  Magic Mount active"
+. /data/adb/magisk/util_functions.sh
+if [ "$MAGISK_VER_CODE" -lt 20400 ]; then
+    ui_print "Please install Magisk v20.4+."
+    exit 1
 fi
-ui_print "- Done. Reboot to apply."
+install_module
+exit 0
